@@ -1,0 +1,36 @@
+/* Custom styles for glassmorphism and New Zealand theme */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --coral-400: #F87171;
+    --coral-500: #EF4444;
+}
+
+.product-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+.product-image {
+    height: 150px;
+    object-fit: cover;
+    width: 100%;
+    border-radius: 8px;
+}
+.animate-fade-in {
+    animation: fadeIn 1s ease-in-out;
+}
+@keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.font-inter {
+    font-family: 'Inter', sans-serif;
+}
