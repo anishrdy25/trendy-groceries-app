@@ -26,11 +26,12 @@
     <main class="container mx-auto py-8">
         <div id="welcome-message" class="text-center text-lg mb-4 text-coral-400 font-semibold"></div>
         <h2 class="text-3xl font-bold text-center mb-8 animate-fade-in">Shop Our Kiwi Range</h2>
+        <div id="admin-bar" class="text-right my-4"></div>
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="product-list"></section>
 
         <section id="admin-panel" class="hidden mt-12">
             <h2 class="text-2xl font-bold mb-4 text-coral-400">Admin Panel</h2>
-            <button id="admin-logout" class="bg-coral-400 text-white px-4 py-2 rounded mb-4 hover:bg-coral-500">Logout</button>
+            <a href="#" class="logout-link text-red-500 hover:underline" onclick="logout()">Logout</a>
             <table class="w-full text-white mb-6">
                 <thead>
                     <tr class="border-b border-gray-300">
@@ -42,7 +43,10 @@
                 </thead>
                 <tbody id="admin-product-list"></tbody>
             </table>
-            <form id="add-product-form" class="max-w-md mx-auto bg-gray-800 p-6 rounded-lg shadow-md space-y-4 mb-6">
+            <!-- Show only for admin -->
+            
+            <section id="add-product-section" style="display: none;">
+            <form id="add-product-form"  style="display: none;" class="max-w-md mx-auto bg-gray-800 p-6 rounded-lg shadow-md space-y-4 mb-6">
                 <h3 class="text-xl font-semibold">Add New Product</h3>
                 <div>
                     <label for="product-name" class="block text-sm font-medium mb-1">Product Name</label>
@@ -62,6 +66,7 @@
                 </div>
                 <button type="submit" class="bg-coral-400 text-white px-4 py-2 rounded hover:bg-coral-500">Add Product</button>
             </form>
+            </section>
             <form id="edit-product-form" class="max-w-md mx-auto bg-gray-800 p-6 rounded-lg shadow-md space-y-4 hidden mb-6">
                 <h3 class="text-xl font-semibold">Edit Product</h3>
                 <input type="hidden" id="edit-product-id">
@@ -112,6 +117,6 @@
         </div>
     </footer>
 
-    <script src="script.js" defer></script>
+    <script type="module" src="./script.js"></script>
 </body>
 </html>
