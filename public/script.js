@@ -1,407 +1,397 @@
-const products = JSON.parse(localStorage.getItem('products')) || [
-    { id: 1, name: "Fresh Kiwifruit", price: 4.99, image: "images/kiwifruit.jpg", stock: 100 },
-    { id: 2, name: "Organic Kumara", price: 2.49, image: "images/kumara.jpg", stock: 200 },
-    { id: 3, name: "Full Cream Milk", price: 3.29, image: "images/milk.jpg", stock: 150 },
-    { id: 4, name: "Sourdough Bread", price: 3.99, image: "images/bread.jpg", stock: 120 },
-    { id: 5, name: "Manuka Honey", price: 19.99, image: "images/honey.jpg", stock: 50 },
-    { id: 6, name: "Hokey Pokey Ice Cream", price: 6.49, image: "images/icecream.jpg", stock: 80 }
-];
+// script.js (Supabase + SweetAlert2 integration with full Admin CRUD support)
+import { supabase } from './supabase.js';
 
-let users = JSON.parse(localStorage.getItem('users')) || [
-    { username: "customer", password: "password123", name: "Customer One", email: "customer@example.com", phone: "", address: "" },
-    { username: "Arun", password: "@Arun@", name: "Arun Kumar", email: "arun@example.com", phone: "", address: "" },
-    { username: "Mike", password: "@Mike@", name: "Mike Smith", email: "mike@example.com", phone: "", address: "" }
-];
+if (typeof Swal === 'undefined') {
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+  document.head.appendChild(script);
+}
 
-const adminCredentials = { username: "admin", password: "admin123" };
+function showAlert(title, text, icon = 'info') {
+  Swal.fire({ title, text, icon });
+}
+
+function showToast(title, icon = 'success') {
+  Swal.fire({ title, icon, timer: 1500, toast: true, position: 'top-end', showConfirmButton: false });
+}
 
 let cart = JSON.parse(sessionStorage.getItem('cart')) || [];
 
-function saveProducts() {
-    localStorage.setItem('products', JSON.stringify(products));
-    // Generate SQL insert statements for new products
-    const existingProductIds = products.map(p => p.id);
-    const sqlStatements = products
-        .filter(p => p.id > 6) // Only include products added after initial set
-        .map(p => `INSERT INTO products (name, price, image_url, stock) VALUES ('${p.name.replace(/'/g, "''")}', ${p.price.toFixed(2)}, '${p.image}', ${p.stock});`)
-        .join('\n');
-    console.log('SQL Insert Statements for new products:\n' + (sqlStatements || 'No new products to add to SQL.'));
+async function loadProducts() {
+  const { data, error } = await supabase.from('products').select('*');
+  if (error) return showAlert('Error', 'Failed to load products', 'error');
+  renderProducts(data);
 }
 
-function saveUsers() {
-    localStorage.setItem('users', JSON.stringify(users));
+function renderProducts(products) {
+  const container = document.getElementById('product-list');
+  if (!container) return;
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+  container.innerHTML = '';
+  products.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'bg-gray-800 p-4 rounded-lg shadow-md text-center';
+    card.innerHTML = `
+      <img src="${p.image_url}" alt="${p.name}" class="w-full h-40 object-cover mb-2 rounded">
+      <h3 class="text-lg font-semibold text-coral-400">${p.name}</h3>
+      <p class="text-white">NZ$${p.price.toFixed(2)}</p>
+      <p class="text-sm text-gray-400 mb-2">Stock: ${p.stock}</p>
+      ${isAdmin ? `
+        <div class="flex justify-center mt-2 space-x-2">
+          <button class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600 text-white text-sm" onclick="openEditForm(${p.product_id})">
+            <i class="fas fa-edit mr-1"></i>Edit
+          </button>
+          <button class="bg-red-500 px-3 py-1 rounded hover:bg-red-600 text-white text-sm" onclick="deleteProduct(${p.product_id})">
+            <i class="fas fa-trash-alt mr-1"></i>Delete
+          </button>
+        </div>
+      ` : `
+        <button class="mt-2 bg-coral-400 px-4 py-1 rounded hover:bg-coral-500 text-white text-sm" onclick="addToCart(${p.product_id})">
+          <i class="fas fa-cart-plus mr-1"></i>Add to Cart
+        </button>
+      `}
+    `;
+    container.appendChild(card);
+  });
 }
 
-function displayProducts(containerId, limit = products.length) {
-    const productList = document.getElementById(containerId);
-    if (!productList) return;
-    productList.innerHTML = '';
-    products.slice(0, limit).forEach(product => {
-        const productCard = document.createElement('div');
-        productCard.className = 'product-card p-4 rounded-lg shadow-md';
-        productCard.innerHTML = `
-            <img src="${product.image}" alt="${product.name}" class="product-image mb-4">
-            <h3 class="text-lg font-semibold text-white">${product.name}</h3>
-            <p class="text-gray-200">NZ$${product.price.toFixed(2)}</p>
-            <button onclick="addToCart(${product.id})" class="bg-coral-400 text-white px-4 py-2 rounded mt-2 hover:bg-coral-500 transition-colors">Add to Cart</button>
-        `;
-        productList.appendChild(productCard);
-    });
-}
-
-function displayAdminProducts() {
-    const productList = document.getElementById('admin-product-list');
-    if (!productList) return;
-    productList.innerHTML = '';
-    products.forEach(product => {
-        const row = document.createElement('tr');
-        row.className = 'border-b border-gray-300';
-        row.innerHTML = `
-            <td class="py-2">${product.name}</td>
-            <td class="py-2 text-right">${product.price.toFixed(2)}</td>
-            <td class="py-2 text-right">${product.stock}</td>
-            <td class="py-2 text-right">
-                <button onclick="editProduct(${product.id})" class="text-coral-400 hover:text-coral-500 mr-2">Edit</button>
-                <button onclick="removeProduct(${product.id})" class="text-red-400 hover:text-red-500">Remove</button>
-            </td>
-        `;
-        productList.appendChild(row);
-    });
-}
-
-function editProduct(productId) {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
-    const editForm = document.getElementById('edit-product-form');
-    const addForm = document.getElementById('add-product-form');
-    if (editForm && addForm) {
-        editForm.classList.remove('hidden');
-        addForm.classList.add('hidden');
-
-        document.getElementById('edit-product-id').value = product.id;
-        document.getElementById('edit-product-name').value = product.name;
-        document.getElementById('edit-product-price').value = product.price;
-        document.getElementById('edit-product-stock').value = product.stock;
-        document.getElementById('edit-product-image').value = ''; // File inputs cannot be pre-filled
+async function openEditForm(productId) {
+  const { data, error } = await supabase.from('products').select('*').eq('product_id', productId).single();
+  if (error || !data) return showAlert('Error', 'Failed to fetch product', 'error');
+  console.log('🛠️ Editing product with ID:', productId);
+  const { value: formValues } = await Swal.fire({
+    title: 'Edit Product',
+    html:
+      `<input id="swal-name" class="swal2-input" placeholder="Name" value="${data.name}">` +
+      `<input id="swal-price" type="number" class="swal2-input" placeholder="Price" value="${data.price}">` +
+      `<input id="swal-stock" type="number" class="swal2-input" placeholder="Stock" value="${data.stock}">`,
+    focusConfirm: false,
+    showCancelButton: true,
+    preConfirm: () => {
+      return {
+        name: document.getElementById('swal-name').value,
+        price: parseFloat(document.getElementById('swal-price').value),
+        stock: parseInt(document.getElementById('swal-stock').value),
+      };
     }
+  });
+
+  if (!formValues) return;
+
+  const { error: updateError } = await supabase
+    .from('products')
+    .update(formValues)
+    .eq('product_id', productId);
+
+  if (updateError) return showAlert('Error', 'Update failed', 'error');
+  showToast('Product updated');
+  loadProducts();
 }
 
-function removeProduct(productId) {
-    if (!confirm(`Are you sure you want to remove "${products.find(p => p.id === productId).name}"?`)) return;
+async function addProduct() {
+  await Swal.fire({
+    title: 'Add New Product',
+    html:
+      `<input id="add-name" class="swal2-input" placeholder="Product Name">` +
+      `<input id="add-price" type="number" class="swal2-input" placeholder="Price">` +
+      `<input id="add-stock" type="number" class="swal2-input" placeholder="Stock">` +
+      `<input id="add-image" class="swal2-input" placeholder="Image Name (e.g., onions.jpg)">`,
+    focusConfirm: false,
+    showCancelButton: true,
+    preConfirm: () => {
+      const name = document.getElementById('add-name').value.trim();
+      const price = parseFloat(document.getElementById('add-price').value);
+      const stock = parseInt(document.getElementById('add-stock').value);
+      const imageName = document.getElementById('add-image').value.trim();
 
-    const productIndex = products.findIndex(p => p.id === productId);
-    if (productIndex !== -1) {
-        products.splice(productIndex, 1);
-        cart = cart.filter(item => item.id !== productId); // Remove from cart
-        sessionStorage.setItem('cart', JSON.stringify(cart));
-        saveProducts();
-        displayAdminProducts();
-        updateCart();
-        alert('Product removed successfully!');
+      if (!name || !price || !stock || !imageName) {
+        Swal.showValidationMessage('Please fill all fields');
+        return false;
+      }
+
+      return { name, price, stock, imageName };
     }
-}
+  }).then(async (result) => {
+    if (!result.isConfirmed) return;
 
-function addToCart(productId) {
-    const product = products.find(p => p.id === productId);
-    if (product && product.stock > 0) {
-        cart.push(product);
-        product.stock--;
-        sessionStorage.setItem('cart', JSON.stringify(cart));
-        saveProducts();
-        updateCart();
-        displayAdminProducts();
+    const { name, price, stock, imageName } = result.value;
+
+    // ✅ Create Supabase public image URL
+    const imageUrl = `https://bpigsoahqafsieyvcoru.supabase.co/storage/v1/object/public/product-images/${imageName}`;
+
+    const { error } = await supabase
+      .from('products')
+      .insert([{ name, price, stock, image_url: imageUrl }])
+      .select();
+    if (error) {
+      Swal.fire('Error', 'Failed to add product', 'error');
     } else {
-        alert('Product is out of stock!');
+      Swal.fire('Success', 'Product added!', 'success');
+      loadProducts();
     }
+  });
 }
+
+
+function renderAdminPanel() {
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+  const adminBar = document.getElementById('admin-bar');
+  if (isAdmin && adminBar) {
+    adminBar.innerHTML = `<button onclick="addProduct()">➕ Add Product</button>`;
+  }
+}
+
+async function addToCart(productId) {
+  const { data: product, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('product_id', productId)
+    .single();
+
+  if (error || !product) return showAlert('Error', 'Product not found', 'error');
+
+  if (product.stock <= 0) {
+    return showAlert('Out of Stock', 'This product is currently unavailable.', 'warning');
+  }
+
+  // 1. Add to session cart
+  cart.push(product);
+  sessionStorage.setItem('cart', JSON.stringify(cart));
+  showToast('Product added to cart');
+  updateCart();
+
+  // 2. Update stock in database
+  const { error: stockError } = await supabase
+    .from('products')
+    .update({ stock: product.stock - 1 })
+    .eq('product_id', productId);
+
+  if (stockError) {
+    showAlert('Warning', 'Failed to update stock in database', 'warning');
+  } else {
+    loadProducts(); // 🔄 Refresh product list
+  }
+}
+
 
 function updateCart() {
-    const cartCountElements = document.querySelectorAll('#cart-count');
-    const cartItems = document.getElementById('cart-items');
-    const cartTotalElements = document.querySelectorAll('#cart-total');
-    const checkoutButton = document.getElementById('checkout-button');
-
-    cartCountElements.forEach(el => el.textContent = cart.length);
-
-    if (cartItems) {
-        cartItems.innerHTML = '';
-        if (cart.length === 0) {
-            cartItems.innerHTML = '<p class="text-white text-center">Your cart is empty.</p>';
-        } else {
-            const table = document.createElement('table');
-            table.className = 'w-full text-white';
-            table.innerHTML = `
-                <thead>
-                    <tr class="border-b border-gray-300">
-                        <th class="py-2 text-left">Item</th>
-                        <th class="py-2 text-right">Price (NZ$)</th>
-                        <th class="py-2 text-right">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${cart.map((item, index) => `
-                        <tr class="border-b border-gray-300">
-                            <td class="py-2">${item.name}</td>
-                            <td class="py-2 text-right">${item.price.toFixed(2)}</td>
-                            <td class="py-2 text-right">
-                                <button onclick="removeFromCart(${index})" class="text-coral-400 hover:text-coral-500">Remove</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            `;
-            cartItems.appendChild(table);
-        }
+  cart = JSON.parse(sessionStorage.getItem('cart')) || [];
+  const countEls = document.querySelectorAll('#cart-count');
+  countEls.forEach(el => el.textContent = cart.length);
+  const cartItems = document.getElementById('cart-items');
+  const cartTotal = document.querySelectorAll('#cart-total');
+  const checkoutBtn = document.getElementById('checkout-button');
+  if (cartItems) {
+    cartItems.innerHTML = '';
+    if (cart.length === 0) {
+      cartItems.innerHTML = '<p>Your cart is empty.</p>';
+    } else {
+      const table = document.createElement('table');
+      table.innerHTML = `
+        <thead><tr><th>Item</th><th>Price</th><th>Action</th></tr></thead>
+        <tbody>
+          ${cart.map((item, i) => `
+            <tr>
+              <td>${item.name}</td>
+              <td>NZ$${item.price.toFixed(2)}</td>
+              <td><button onclick="removeFromCart(${i})">Remove</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+      cartItems.appendChild(table);
     }
-
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
-    cartTotalElements.forEach(el => el.textContent = total.toFixed(2));
-
-    if (checkoutButton) {
-        checkoutButton.disabled = cart.length === 0;
-    }
+  }
+  const total = cart.reduce((sum, item) => sum + item.price, 0);
+  cartTotal.forEach(el => el.textContent = total.toFixed(2));
+  if (checkoutBtn) checkoutBtn.disabled = cart.length === 0;
 }
 
 function removeFromCart(index) {
-    const product = cart[index];
-    const productInStock = products.find(p => p.id === product.id);
-    if (productInStock) productInStock.stock++;
-    cart.splice(index, 1);
-    sessionStorage.setItem('cart', JSON.stringify(cart));
-    saveProducts();
-    updateCart();
-    displayAdminProducts();
-}
-
-function proceedToCheckout() {
-    if (cart.length === 0) return;
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
-    if (!isLoggedIn) {
-        alert('Please log in to proceed with checkout.');
-        window.location.href = 'login.html';
-        return;
-    }
-    alert('Order placed successfully! Kia ora for shopping with Trendy Groceries NZ.');
-    cart = [];
-    sessionStorage.setItem('cart', JSON.stringify(cart));
-    saveProducts();
-    updateCart();
-    displayAdminProducts();
-    window.location.href = 'shop.html'; // Redirect to shop.html after successful checkout
-}
-
-function updateNavLinks() {
-    const navLinks = document.getElementById('nav-links');
-    const loginLink = document.getElementById('login-link');
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
-    const username = sessionStorage.getItem('username') || '';
-
-    if (navLinks && loginLink) {
-        if (isLoggedIn && username) {
-            loginLink.innerHTML = `
-                <span class="hover:text-coral-400 transition-colors">
-                    <i class="fas fa-user mr-1"></i> Welcome ${username}
-                    <span class="ml-2 cursor-pointer text-coral-400 hover:text-coral-500" onclick="logout()">Logout</span>
-                </span>
-            `;
-            loginLink.href = '#';
-        } else {
-            loginLink.href = 'login.html';
-            loginLink.innerHTML = '<i class="fas fa-user mr-1"></i> Login';
-        }
-    }
+  cart.splice(index, 1);
+  sessionStorage.setItem('cart', JSON.stringify(cart));
+  showToast('Removed from cart');
+  updateCart();
 }
 
 function logout() {
-    sessionStorage.removeItem('isLoggedIn');
-    sessionStorage.removeItem('username');
-    sessionStorage.removeItem('isAdmin');
-    alert('Logged out successfully! Kia ora.');
-    window.location.href = 'index.html';
-    updateNavLinks();
+  sessionStorage.clear();
+  showToast('Logged out');
+  updateNavLinks();
+  window.location.href = 'index.html';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    updateNavLinks();
+function updateNavLinks() {
+  const link = document.getElementById('login-link');
+  const user = sessionStorage.getItem('username');
+  const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+  if (!link) return;
+  if (isLoggedIn) {
+    link.innerHTML = `Welcome ${user} <a href="#" class="logout-link">Logout</a>`;
+    const logoutLink = link.querySelector('.logout-link');
+    if (logoutLink) logoutLink.addEventListener('click', e => { e.preventDefault(); logout(); });
+  } else {
+    link.innerHTML = '<a href="login.html">Login</a>';
+  }
+}
 
-    if (document.getElementById('featured-products')) {
-        displayProducts('featured-products', 4);
-    }
-    if (document.getElementById('product-list')) {
-        displayProducts('product-list');
-    }
-    updateCart();
+async function loginUser(username, password) {
+  if (username === 'admin' && password === 'admin123') {
+    sessionStorage.setItem('isAdmin', 'true');
+    sessionStorage.setItem('isLoggedIn', 'true');
+    sessionStorage.setItem('username', 'admin');
+    showToast('Admin login successful');
+    window.location.href = 'shop.html';
+    return;
+  }
+  const { data, error } = await supabase.from('users').select('*')
+    .eq('username', username)
+    .eq('password', password).single();
+  if (error || !data) return showAlert('Login Failed', 'Invalid credentials', 'error');
+  sessionStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('username', data.username);
+  showToast('Login successful');
+  window.location.href = 'index.html';
+}
 
-    const checkoutButton = document.getElementById('checkout-button');
-    if (checkoutButton) {
-        checkoutButton.addEventListener('click', proceedToCheckout);
-    }
+async function registerUser(user) {
+  const { data: existingUser } = await supabase.from('users').select('*').eq('username', user.username).maybeSingle();
+  if (existingUser) return showAlert('Error', 'Username already exists', 'warning');
+  const { error } = await supabase.from('users').insert([user]);
+  if (error) return showAlert('Error', 'Registration failed', 'error');
+  showToast('Registered successfully');
+  window.location.href = 'login.html';
+}
+function proceedToCheckout() {
+  Swal.fire({
+    title: 'Order Placed!',
+    text: 'Thank you for shopping with Trendy Groceries NZ 🎉',
+    icon: 'success',
+    confirmButtonText: 'Return to Home'
+  }).then(() => {
+    sessionStorage.removeItem('cart'); // clear cart
+    window.location.href = 'index.html'; // redirect to home
+  });
+}
 
-    const loginForm = document.getElementById('login-form');
-    if (loginForm) {
-        loginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            // Check if admin
-        if (username === adminCredentials.username && password === adminCredentials.password) {
-            sessionStorage.setItem('isLoggedIn', 'true');
-            sessionStorage.setItem('username', username);
-            sessionStorage.setItem('isAdmin', 'true');
-            alert('Admin login successful!');
-            window.location.href = 'admin.html';
-            return;
-        }
-            const user = users.find(u => u.username === username && u.password === password);
-            if (user) {
-                sessionStorage.setItem('isLoggedIn', 'true');
-                sessionStorage.setItem('username', username);
-                alert('Login successful! Kia ora.');
-                updateNavLinks();
-                window.location.href = 'index.html';
-            } else {
-                alert('Invalid username or password. Please try again.');
-            }
-        });
-    }
 
-    const registerForm = document.getElementById('register-form');
-    if (registerForm) {
-        registerForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
-            const phone = document.getElementById('phone').value;
-            const address = document.getElementById('address').value;
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+window.addEventListener('DOMContentLoaded', () => {
 
-            if (users.some(u => u.username === username)) {
-                alert('Username already exists. Please choose another.');
-                return;
-            }
-            if (users.some(u => u.email === email)) {
-                alert('Email already registered. Please use another email.');
-                return;
-            }
+  updateNavLinks();
+   // Show add-product-form only for admin
+  const addForm = document.getElementById('add-product-form');
+  if (sessionStorage.getItem('isAdmin') === 'true' && addForm) {
+    addForm.style.display = 'block';
+  }
+  updateCart();
+  renderAdminPanel();
+  loadProducts();
 
-            users.push({ username, password, name, email, phone, address });
-            saveUsers();
-            alert('Registration successful! Please log in.');
-            window.location.href = 'login.html';
-        });
-    }
+  
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      loginUser(username, password);
+    });
+  }
 
-    const adminLoginForm = document.getElementById('admin-login-form');
-    if (adminLoginForm) {
-        adminLoginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const username = document.getElementById('admin-username').value;
-            const password = document.getElementById('admin-password').value;
+  const registerForm = document.getElementById('register-form');
+  if (registerForm) {
+    registerForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const user = {
+        name: document.getElementById('name').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        address: document.getElementById('address').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      };
+      registerUser(user);
+    });
+  }
 
-            if (username === adminCredentials.username && password === adminCredentials.password) {
-                sessionStorage.setItem('isAdmin', 'true');
-                document.getElementById('admin-login').classList.add('hidden');
-                document.getElementById('admin-panel').classList.remove('hidden');
-                displayAdminProducts();
-            } else {
-                alert('Invalid admin credentials. Please try again.');
-            }
-        });
-    }
+  document.getElementById('add-product-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-    const addProductForm = document.getElementById('add-product-form');
-    if (addProductForm) {
-        addProductForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = document.getElementById('product-name').value;
-            const price = parseFloat(document.getElementById('product-price').value);
-            const imageFile = document.getElementById('product-image').files[0];
-            const stock = parseInt(document.getElementById('product-stock').value);
+    const name = document.getElementById('product-name').value.trim();
+    const price = parseFloat(document.getElementById('product-price').value);
+    const stock = parseInt(document.getElementById('product-stock').value);
+    const imageFile = document.getElementById('product-image').files[0];
 
-            if (imageFile) {
-                const reader = new FileReader();
-                reader.onload = function (event) {
-                    const imageDataUrl = event.target.result;
-                    const newProduct = {
-                        id: products.length ? Math.max(...products.map(p => p.id)) + 1 : 1,
-                        name,
-                        price,
-                        image: imageDataUrl,
-                        stock
-                    };
-                    products.push(newProduct);
-                    saveProducts();
-                    displayAdminProducts();
-                    addProductForm.reset();
-                    alert('Product added successfully! Check the Shop page to view it.');
-                };
-                reader.readAsDataURL(imageFile);
-            } else {
-                alert('Please select an image file.');
-            }
-        });
+    if (!name || isNaN(price) || isNaN(stock) || !imageFile) {
+      return showAlert('Error', 'Please fill all fields', 'error');
     }
 
-    const editProductForm = document.getElementById('edit-product-form');
-    if (editProductForm) {
-        editProductForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const productId = parseInt(document.getElementById('edit-product-id').value);
-            const name = document.getElementById('edit-product-name').value;
-            const price = parseFloat(document.getElementById('edit-product-price').value);
-            const stock = parseInt(document.getElementById('edit-product-stock').value);
-            const imageFile = document.getElementById('edit-product-image').files[0];
+    const fileExt = imageFile.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `products/${fileName}`;
 
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                product.name = name;
-                product.price = price;
-                product.stock = stock;
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, imageFile);
 
-                if (imageFile) {
-                    const reader = new FileReader();
-                    reader.onload = function (event) {
-                        product.image = event.target.result;
-                        saveProducts();
-                        displayAdminProducts();
-                        editProductForm.reset();
-                        editProductForm.classList.add('hidden');
-                        document.getElementById('add-product-form').classList.remove('hidden');
-                        alert('Product updated successfully!');
-                    };
-                    reader.readAsDataURL(imageFile);
-                } else {
-                    saveProducts();
-                    displayAdminProducts();
-                    editProductForm.reset();
-                    editProductForm.classList.add('hidden');
-                    document.getElementById('add-product-form').classList.remove('hidden');
-                    alert('Product updated successfully!');
-                }
-            }
-        });
+    if (uploadError) {
+      return showAlert('Upload Failed', uploadError.message, 'error');
     }
 
-    const cancelEditButton = document.getElementById('cancel-edit');
-    if (cancelEditButton) {
-        cancelEditButton.addEventListener('click', () => {
-            const editForm = document.getElementById('edit-product-form');
-            const addForm = document.getElementById('add-product-form');
-            editForm.classList.add('hidden');
-            editForm.reset();
-            addForm.classList.remove('hidden');
-        });
+    const { data: imageUrlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath);
+
+    const imageUrl = imageUrlData.publicUrl;
+
+    const { data: insertedProduct, error: insertError } = await supabase.from('products').insert([{
+  name,
+  price,
+  stock,
+  image_url: imageUrl
+}]).select();
+
+    if (insertError) {
+      return showAlert('Error', 'Product not added', 'error');
     }
 
-    if (sessionStorage.getItem('isAdmin') === 'true') {
-        const adminLogin = document.getElementById('admin-login');
-        const adminPanel = document.getElementById('admin-panel');
-        if (adminLogin && adminPanel) {
-            adminLogin.classList.add('hidden');
-            adminPanel.classList.remove('hidden');
-            displayAdminProducts();
-        }
-    }
+    showToast('Product added successfully');
+    e.target.reset();
+    document.getElementById('add-product-section').style.display = 'none';
+
+    loadProducts();
+      const checkoutBtn = document.getElementById('checkout-button');
+  if (checkoutBtn) {
+    checkoutBtn.addEventListener('click', () => {
+      Swal.fire({
+        icon: 'success',
+        title: 'Thank you for your purchase!',
+        text: 'Your order has been placed.',
+        showConfirmButton: false,
+        timer: 2000
+      });
+
+      sessionStorage.removeItem('cart');
+      updateCart();
+
+      setTimeout(() => {
+        window.location.href = 'index.html';
+      }, 2000);
+    });
+  }
+
+  });
 });
+
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.logout = logout;
+window.deleteProduct = async function(productId) {
+  const { error } = await supabase.from('products').delete().eq('product_id', productId);
+  if (error) return showAlert('Error', 'Delete failed', 'error');
+  showToast('Product deleted');
+  loadProducts();
+};
+window.addProduct = addProduct;
+window.openEditForm = openEditForm;
+window.proceedToCheckout = proceedToCheckout; // ✅ ADD THIS LINE
